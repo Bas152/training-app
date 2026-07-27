@@ -1,4 +1,4 @@
-const CACHE = "logboek-v3";
+const CACHE = "logboek-v4";
 const ASSETS = [
   "./", "./index.html", "./manifest.json",
   "./css/style.css",
