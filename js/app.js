@@ -143,7 +143,8 @@ function renderVandaag() {
   const dayName = dayNameFromISO(date);
   const isToday = date === today;
 
-  wrap.appendChild(el(`
+  const stickyHeader = el(`<div class="sticky-header"></div>`);
+  stickyHeader.appendChild(el(`
     <div class="topbar">
       <div>
         <div class="eyebrow">${isoToNL(date)} · ${currentPhase() === "bulk" ? "Bulk fase" : "Lean fase"}</div>
@@ -156,15 +157,16 @@ function renderVandaag() {
       </button>
     </div>
   `));
-  wrap.querySelector("#settingsBtn").addEventListener("click", () => navigate("instellingen"));
+  stickyHeader.querySelector("#settingsBtn").addEventListener("click", () => navigate("instellingen"));
 
-  wrap.appendChild(renderWeekStrip(date, today));
+  stickyHeader.appendChild(renderWeekStrip(date, today));
 
   if (!isToday) {
     const backBtn = el(`<button class="btn ghost small" style="margin-bottom:12px">← Terug naar vandaag</button>`);
     backBtn.addEventListener("click", () => { selectedDate = today; weekAnchor = mondayOf(today); render(); });
-    wrap.appendChild(backBtn);
+    stickyHeader.appendChild(backBtn);
   }
+  wrap.appendChild(stickyHeader);
 
   const type = DAY_TYPE[dayName];
   if (type === "strength") {
@@ -327,11 +329,26 @@ function renderExerciseLogger(ex, dateISO, { readOnly = false, historical = fals
 
   const setsWrap = el(`<div class="sets-wrap"></div>`);
   const rows = [];
-  workingSets.forEach((s, i) => {
-    const row = renderSetRow(i + 1, s.weight, s.reps);
+
+  function renumberRows() {
+    rows.forEach((r, i) => { r.el.querySelector(".set-label").textContent = `Set ${i + 1}`; });
+    rows.forEach(r => { r.removeBtn.style.visibility = rows.length > 1 ? "visible" : "hidden"; });
+  }
+
+  function addRow(weight, reps) {
+    const row = renderSetRow(rows.length + 1, weight, reps, () => {
+      const idx = rows.indexOf(row);
+      if (idx === -1 || rows.length <= 1) return;
+      rows.splice(idx, 1);
+      row.el.remove();
+      renumberRows();
+    });
     rows.push(row);
     setsWrap.appendChild(row.el);
-  });
+    renumberRows();
+  }
+
+  workingSets.forEach(s => addRow(s.weight, s.reps));
   block.appendChild(setsWrap);
 
   const actions = el(`
@@ -341,9 +358,7 @@ function renderExerciseLogger(ex, dateISO, { readOnly = false, historical = fals
     </div>
   `);
   actions.children[0].addEventListener("click", () => {
-    const row = renderSetRow(rows.length + 1, workingSets[workingSets.length - 1]?.weight || 10, 8);
-    rows.push(row);
-    setsWrap.appendChild(row.el);
+    addRow(workingSets[workingSets.length - 1]?.weight || 10, 8);
   });
   actions.children[1].addEventListener("click", () => {
     const workData = rows.map(r => ({ weight: r.getWeight(), reps: r.getReps() }));
@@ -368,7 +383,7 @@ function renderExerciseLogger(ex, dateISO, { readOnly = false, historical = fals
   return block;
 }
 
-function renderSetRow(index, weight, reps) {
+function renderSetRow(index, weight, reps, onRemove) {
   const row = el(`
     <div class="set-row">
       <div class="set-label mono">Set ${index}</div>
@@ -380,10 +395,13 @@ function renderSetRow(index, weight, reps) {
       </div>
       <input type="number" value="${reps}" class="reps-input mono repsInput"/>
       <span class="mono" style="font-size:11px;color:var(--chalk-dim)">reps</span>
+      <button type="button" class="removeSetBtn" title="Set verwijderen" style="color:var(--chalk-dim);font-size:16px;line-height:1;padding:4px 6px">✕</button>
     </div>
   `);
   const weightInput = row.querySelector(".weightInput");
   const repsInput = row.querySelector(".repsInput");
+  const removeBtn = row.querySelector(".removeSetBtn");
+  removeBtn.addEventListener("click", () => onRemove());
   row.querySelectorAll("button[data-d]").forEach(btn => {
     btn.addEventListener("click", () => {
       const step = parseFloat(btn.dataset.d) * 1.25;
@@ -392,6 +410,7 @@ function renderSetRow(index, weight, reps) {
   });
   return {
     el: row,
+    removeBtn,
     getWeight: () => parseFloat(weightInput.value.toString().replace(",", ".")) || 0,
     getReps: () => parseInt(repsInput.value) || 0,
   };
